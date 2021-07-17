@@ -1,5 +1,6 @@
 # Regression Modeling with California Housing Values (R)
 
+## Lines 4-11 R is importing modules to be used throughout the code
 library(maps)  # making making 
 library(mapproj)  # projections for map making
 library(spgwr)  # spatially-weighted regression
@@ -9,12 +10,18 @@ library(rpart.plot)  # plot tree-structured model information
 library(lattice)  # statistical graphics
 library(cvTools)  # cross-validation tools including rmspe 
 
+## Lines 16-19 R is reading the data file (houses_data.txt), ignoring the
+## header, and giving column names as listed in the vector created by function 
+## c()
 # read in the housing data
 houses <-  read.table("houses_data.txt", header = FALSE, sep = "", 
    dec = ".", row.names = NULL, 
    col.names = c("value", "income", "age", "rooms", "bedrooms", 
    "pop", "hh", "latitude", "longitude"))          
 
+## Lines 24-31 R is creating computed variables among the variables/features
+## available. log() function creates the logarithm of the values inside
+## the parentheses.
 # computed variables for linear model used by Pace and Barry (1997)   
 houses$log_value <- log(houses$value)  
 houses$income_squared <- houses$income^2 
@@ -25,11 +32,14 @@ houses$log_pc_bedrooms <- log(houses$bedrooms / houses$pop)
 houses$log_pop_hh <- log(houses$pop / houses$hh)
 houses$log_hh <- log(houses$hh)
 
+## Lines 37-50 R is putting together variables will be used for fitting the 
+## the different models used in this code
 # structure of the Pace and Barry (1997) model for baseline for comparisons
 pace.barry.model <- {log_value ~ income + income_squared + 
   income_cubed + log_age + log_pc_rooms + log_pc_bedrooms + 
   log_pop_hh + log_hh}
 
+## Lines 43-44 R is running the 
 # for comparison let's look at a simple model with the original variables
 simple.model <-  {log_value ~ income + age + rooms + bedrooms +
   pop + hh} 
@@ -44,6 +54,7 @@ full.model <- {log_value ~ income + age + rooms + bedrooms +
 # subset of the data... San Diego area  
 # we use nested ifelse statements to do this
 
+## Defining some constants variables in R
 # define the bounding box for selecting the area
 # here we are selecting the San Diego region
 BB.TOP <- 33
@@ -51,6 +62,8 @@ BB.BOTTOM <- 32
 BB.RIGHT <- -116.75
 BB.LEFT <- -125
 
+## Using the function factor() to encode a vector as a factor (terms category
+## and enumerated type)
 houses$select <- ifelse(((houses$latitude < BB.TOP)),
   ifelse((houses$longitude < BB.RIGHT),
   ifelse((houses$latitude > BB.BOTTOM),
@@ -59,7 +72,9 @@ houses$select <- factor(houses$select, levels = c(1,2),
   labels = c("Selected","Not Selected"))
 houses.selected <- subset(houses, subset = (select == "Selected"))
 houses.notselected <- subset(houses, subset = (select == "Not Selected"))  
-    
+
+## Using pdf function to create PDF and map function to draw lines and polygons
+## as specifiedby a map db
 # plot the locations of block groups red in the selected area, blue otherwise
 pdf(file = "fig_spatial_map_selected_region.pdf", width = 8.5, height = 8.5)
 pointsize <- 0.5
@@ -72,7 +87,8 @@ legend("right", legend = c("Selected Region","Not Selected"),
   col = c("red","darkblue"), pch = 20)
 map.scale()  
 dev.off()
-        
+
+## Splting the data between train and test for houses selected above        
 # define training and test sets for the selected houses
 set.seed(4444)
 partition <- sample(nrow(houses.selected)) # permuted list of row index numbers
@@ -134,6 +150,7 @@ print(levelplot(ordered.houses.train.cormat, cuts = 25, tick.number = 9,
     }))
 dev.off()    
 
+## function splom() draw conditional scatter plot matrices
 # scatter plot matrix (splom) demonstration
 houses.train.splom.vars <- 
   houses.train[,c("log_value","income","age","rooms")]
@@ -148,6 +165,8 @@ dev.off()
 # Applied Spatial Data Analysis, New York: Springer.
 # this involves adding coordinate objects to data frame objects
 # training set coordinates to add
+## cbind() function take a sequence of vector, matrix or dataframe arguments
+## and combine by columns or rows
 houses.coord <- cbind(houses.train$longitude,houses.train$latitude) 
 # define spatial points data frame object
 houses.train <- SpatialPointsDataFrame(houses.coord,houses.train,bbox = NULL) 
@@ -163,6 +182,7 @@ print(str(houses.train))
 # --------------------------------------------
 # Linear regression a la Pace and Barry (1997)
 # --------------------------------------------
+## lm() function is used to fit linear models
 pace.barry.train.fit <- lm(pace.barry.model, data = houses.train)
 
 print(pace.barry.train.fit)
@@ -185,6 +205,7 @@ print(rmspe(houses.test$log_value, predict(pace.barry.train.fit,
 print(cor(houses.test$log_value,
   predict(pace.barry.train.fit, newdata = houses.test))^2)
   
+## predict() predicts values based on linear model object above
 cat("\n\nTest set proportion of variance accounted",
   " for by linear regression = ",
   sprintf("%1.3f",cor(houses.test$log_value,
@@ -193,8 +214,10 @@ cat("\n\nTest set proportion of variance accounted",
 # demonstrate cross-validation within the training set
 # specify ten-fold cross-validation within the training set
 # K = folds   R = replications of K-fold cross-validation
+## cvFolds() splits n observations into K groups for the cross-validation
 set.seed(1234)  # for reproducibility
 folds <- cvFolds(nrow(houses.train), K = 10, R = 50)  
+## cmLm() estimates the prediction erorr of a linear model via k-fold cross-v.
 cv.pace.barry.train.fit <- cvLm(pace.barry.train.fit, cost = rtmspe, 
   folds = folds, trim = 0.1)
 # root-mean-squared prediction error estimated by cross-validation
@@ -206,6 +229,7 @@ print(cv.pace.barry.train.fit)
 # try tree-structured regression on the original explantory variables
 # note that one of the advantages of trees is no need for transformations
 # of the explanatory variables 
+##rpart() fir a rpart model (recursive part. and regression trees)
 rpart.train.fit <- rpart(simple.model, data = houses.train)
 print(summary(rpart.train.fit))  # tree summary statistics and split detail
 houses.train$rpart.train.fit.pred <- predict(rpart.train.fit, 
@@ -234,6 +258,7 @@ cat("\n\nTest set proportion of variance accounted",
 
 # plot the regression tree result from rpart
 pdf(file = "fig_spatial_rpart_model.pdf", width = 8.5, height = 8.5)
+## prp() plot a rpart model
 prp(rpart.train.fit, main="",
   digits = 3,  # digits to display in terminal nodes
   nn = TRUE,  # display the node numbers
@@ -309,6 +334,8 @@ dev.off()
 # Random forests (simple)
 # --------------------------------------
 set.seed (9999)  # for reproducibility
+##randomForest() implements Breiman's random forest algorithm for classification
+## and regression
 rf.train.fit <- randomForest(simple.model, 
   data=houses.train, mtry=3, importance=TRUE, na.action=na.omit) 
 
@@ -318,6 +345,7 @@ print(rf.train.fit)
 # check importance of the individual explanatory variables 
 pdf(file = "fig_spatial_random_forest_simple_importance.pdf", 
 width = 11, height = 8.5)
+## Dotchart of variable importance as measured by a random forest
 varImpPlot(rf.train.fit, main = "", pch = 20, col = "darkblue")
 dev.off()
 
@@ -326,6 +354,7 @@ houses.train$rf.train.fit.pred <- predict(rf.train.fit, type="class",
   newdata = houses.train)
 
 # root-mean-squared for random forest on training set
+##rmspe() compute the prediction loss of a model
 print(rmspe(houses.train$log_value, houses.train$rf.train.fit.pred)) 
 # report R-squared on training data
 print(cor(houses.train$log_value,houses.train$rf.train.fit.pred)^2)
@@ -342,6 +371,8 @@ houses.test$rf.train.fit.pred <- predict(rf.train.fit,
 # root-mean-squared for random forest on test set
 print(rmspe(houses.test$log_value, houses.test$rf.train.fit.pred)) 
 # report R-squared on training data
+##cor() computes the correlation, variance and covariance of x and y if they are
+##vectors
 print(cor(houses.test$log_value,houses.test$rf.train.fit.pred)^2)
 
 cat("\n\nTest set proportion of variance accounted",
@@ -398,10 +429,12 @@ cat("\n\nTest set proportion of variance accounted",
 # Geographically weighted regression
 # --------------------------------------    
 # bandwidth calculation may take a while
+## gwr.sel() finds a bandwidth for a given geo weighted regression
 set.bandwidth <-  gwr.sel(pace.barry.model, 
   data=houses.train, verbose = FALSE, show.error.messages = FALSE) 
 
 # fit the geographically-weighted regression with bandwidth value set.bandwidth
+## gwr() implements the basic geo weighted regressino approach
 gwr.train.fit <- gwr(pace.barry.model, bandwidth = set.bandwidth, 
   predictions = TRUE, data=houses.train, fit.points = houses.train)
 # extract training set predictions
@@ -438,6 +471,9 @@ cat("\n\nTest set proportion of variance accounted",
 # Gather results for a single report
 # --------------------------------------     
 # measurement model performance summary
+## Gathering in one place all the model results from above to show on the screen
+## 3 columns, one with the method name, training column with results for training
+## dataset and last column called test for results for test dataset.
 methods <- c("Linear regression Pace and Barry (1997)",
   "Tree-structured regression (simple model)",
   "Tree-structured regression (full model)",
